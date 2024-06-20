@@ -16,7 +16,7 @@ Install the extension from the [Chrome Web Store](https://chromewebstore.google.
 
 1. Download the `bullhound-extension.zip` file and move it to the folder you want the extension to live in (such as `Documents`).
 
-1. Unzip the file, which will place a folder called “bullhound” where the .zip file was placed. (You can delete the .zip file now, if you want.)
+1. Unzip the file, which will place a folder called `bullhound` where the .zip file was placed. (You can delete the .zip file now, if you want.)
 
 1. Open Chrome, and go to the **Extensions** page. You can get there quickly by typing into the address bar: `chrome://extensions`
 
@@ -30,9 +30,9 @@ That's it! If you don’t see Bullhound (an icon of a dog) in your Chrome extens
 
 ## Troubleshooting
 
-This plugin might stop working if Bullhorn updates their CMS significantly enough that the extension no longer recognizes the underlying HTML structure of the table, which it uses to scrape data.
+Bullhound will stop working if/when Bullhorn updates their CMS significantly enough that the extension no longer recognizes the underlying HTML structure of the table, which it uses to scrape data.
 
-That said, until that day, [clearing your cache](http://google.com/search?q=chrome+how+to+clear+cache) seems to fix any issues with the plugin 100% of the time.
+That said, until that day, [clearing your Chrome cache](http://google.com/search?q=chrome+how+to+clear+cache) seems to fix any issues with the extension 100% of the time.
 
 ## Still having issues?
 
