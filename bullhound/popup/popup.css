@@ -1,0 +1,128 @@
+:root {
+    --font-size-base: 10px;
+    --font-size-body: 1.2rem;
+    --font-size-button: 1.3rem;
+    --font-size-footer: 1rem;
+    --font-size-h2: 1.6rem;
+    --font-size-h3: 1.3rem;
+    --color-bg-body: #f4f4f4;
+    --color-bg-header: #202945;
+    --color-text-links: #4a89dc;
+    --color-text-body: #3d464d;
+    --color-text-header: #f4f4f4;
+    --color-bg-button: #4a89dc;
+    --color-text-button: #f4f4f4;
+    --global-window-width: 24rem;
+    --global-window-height: 100%;
+}
+
+html {
+    font-size: var(--font-size-base);
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-bg-body);
+    color: var(--color-text-body);
+    font-family: Montserrat, Helvetica, Arial, sans-serif;
+    font-weight: 400;
+    font-size: var(--font-size-body);
+    width: var(--global-window-width);
+    height: var(--global-window-height);
+}
+
+hr {
+    border-top: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+header {
+    padding: 1em;
+    background-color: var(--color-bg-header);
+    color: var(--color-text-header);
+}
+
+.container {
+    padding: 0em 1em 1em 1em;
+}
+
+h2 {
+    font-size: var(--font-size-h2);
+    font-weight: 700;
+}
+
+h3 {
+    font-size: var(--font-size-h3);
+    font-weight: 400;
+}
+
+#footer {
+    font-size: var(--font-size-footer);
+    width: 100%;
+    text-align: right;
+}
+
+ul {
+    margin: 0;
+    padding: 0;
+}
+
+ul li {
+    list-style: none;
+    display: inline;
+}
+
+ul li:after {
+    content: " \00b7";
+}
+
+ul li:last-child:after {
+    content: none;
+}
+
+.feature {
+    margin-bottom: 1em;
+}
+
+a {
+    color: var(--color-text-links);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+button#start-csv {
+    display: none;
+}
+
+button {
+    background-color: var(--color-bg-button) !important;
+    color: var(--color-text-button) !important;
+    align-items: center;
+    display: inline-flex;
+    cursor: pointer;
+    text-transform: uppercase;
+    border: 0;
+    color: var(--font-size-button);
+    border-radius: 3px;
+    height: 3rem;
+    padding: 0 1rem;
+}
+
+@font-face {
+    font-family: "Montserrat";
+    font-style: normal;
+    font-weight: 400;
+    src: local("Montserrat"), url("montserrat-400.woff2") format("woff2");
+    /* Chrome 26+, Opera 23+, Firefox 39+ */
+}
+
+@font-face {
+    font-family: "Montserrat";
+    font-style: normal;
+    font-weight: 700;
+    src: local("Montserrat"), url("montserrat-700.woff2") format("woff2");
+    /* Chrome 26+, Opera 23+, Firefox 39+ */
+}
