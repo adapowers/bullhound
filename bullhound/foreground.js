@@ -58,6 +58,14 @@ const prep = function(frame) {
 // CONTENT
 const tryUpdate = () => {
     try {
+            // Newer format: content in page (no iframe), novo-title is an attribute
+            let titleEl = document.querySelector('novo-title');
+            if (titleEl) {
+                return  {   success: true,
+                            name: titleEl.innerHTML
+                        }
+            }
+            // Older format: content in iframe, novo-title is an element
             let frame = document.querySelector('iframe.active').contentWindow.document;
             return  {   success: true,
                         name: frame.querySelector('novo-title').innerHTML
@@ -72,6 +80,16 @@ const tryUpdate = () => {
 // CONTENT
 const tryFile = () => {
     try {
+            // Newer format: content in page (no iframe), novo-title is an attribute
+            let titleEl = document.querySelector('novo-title');
+            if (titleEl) {
+                // log('Transferred file');
+                return  {   success: true,
+                            prefix: titleEl.innerHTML,
+                            file: JSON.stringify(prep(document))
+                        }
+            }
+            // Older format: content in iframe, novo-title is an element
             let frame = document.querySelector('iframe.active').contentWindow.document;
             // log('Transferred file');
             return  {   success: true,
