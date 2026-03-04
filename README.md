@@ -16,7 +16,7 @@ Install the extension from the [Chrome Web Store](https://chromewebstore.google.
 
 1. Download the `bullhound-extension.zip` file and move it to the folder you want the extension to live in (such as `Documents`).
 
-1. Unzip the file, which will place a folder called `bullhound` where the .zip file was placed. (You can delete the .zip file now, if you want.)
+1. Unzip the file, which will place a folder called `bullhound-extension` where the .zip file was placed. (You can delete the .zip file now, if you want.)
 
 1. Open Chrome, and go to the **Extensions** page. You can get there quickly by typing into the address bar: `chrome://extensions`
 
@@ -24,7 +24,7 @@ Install the extension from the [Chrome Web Store](https://chromewebstore.google.
 
 1. Click the button that says **Load unpacked**.
 
-1. Chrome will ask you to select the folder containing the extension. Point it to the `bullhound` folder you unzipped, **not** the .zip file itself.
+1. Chrome will ask you to select the folder containing the extension. Point it to the `bullhound-extension` folder you unzipped, **not** the .zip file itself.
 
 That's it! If you don’t see Bullhound (an icon of a dog) in your Chrome extensions bar, then look where the extension icons are and click the dark puzzle piece, then select Bullhound (or click the pin next to it to make it visible all the time).
 
