@@ -26,7 +26,7 @@ Install the extension from the [Chrome Web Store](https://chromewebstore.google.
 
 1. Chrome will ask you to select the folder containing the extension. Point it to the `bullhound` folder you unzipped, **not** the .zip file itself.
 
-That's it! If you don’t see Bullhound (an icon of a dog) in your Chrome extensions bar, then look where the extension icons are and click the dark puzzle piece, then select Bullhound (or click the pin next to it to make if visible all the time).
+That's it! If you don’t see Bullhound (an icon of a dog) in your Chrome extensions bar, then look where the extension icons are and click the dark puzzle piece, then select Bullhound (or click the pin next to it to make it visible all the time).
 
 ## Troubleshooting
 

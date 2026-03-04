@@ -1,10 +1,10 @@
 :root {
     --font-size-base: 10px;
-    --font-size-body: 1.2rem;
-    --font-size-button: 1.3rem;
+    --font-size-body: 1.3rem;
     --font-size-footer: 1rem;
     --font-size-h2: 1.6rem;
     --font-size-h3: 1.3rem;
+    --font-size-h4: 1.1rem;
     --color-bg-body: #f4f4f4;
     --color-bg-header: #202945;
     --color-text-links: #4a89dc;
@@ -12,8 +12,8 @@
     --color-text-header: #f4f4f4;
     --color-bg-button: #4a89dc;
     --color-text-button: #f4f4f4;
-    --global-window-width: 24rem;
-    --global-window-height: 100%;
+    --color-danger: #c0392b;
+    --global-window-width: 32rem;
 }
 
 html {
@@ -29,11 +29,6 @@ body {
     font-weight: 400;
     font-size: var(--font-size-body);
     width: var(--global-window-width);
-    height: var(--global-window-height);
-}
-
-hr {
-    border-top: 1px solid rgba(0, 0, 0, 0.25);
 }
 
 header {
@@ -43,7 +38,7 @@ header {
 }
 
 .container {
-    padding: 0em 1em 1em 1em;
+    padding: 0 1em 0.5em;
 }
 
 h2 {
@@ -53,13 +48,16 @@ h2 {
 
 h3 {
     font-size: var(--font-size-h3);
-    font-weight: 400;
+    font-weight: 700;
 }
 
-#footer {
-    font-size: var(--font-size-footer);
-    width: 100%;
-    text-align: right;
+hr {
+    margin-block: 0.5em;
+    margin-inline: auto;
+    color: var(--color-bg-header);
+    opacity: 0.8;
+    border-style: inset;
+    border-width: 1px;
 }
 
 ul {
@@ -67,21 +65,51 @@ ul {
     padding: 0;
 }
 
-ul li {
+ul.not-found {
+    padding-left: 2em;
+    padding-bottom: 0.5em;
+}
+
+ul.footer li,
+ul.result li {
     list-style: none;
+}
+
+ul.footer li,
+ul.result li.result-meta {
     display: inline;
 }
 
-ul li:after {
+ul.footer li:after {
     content: " \00b7";
 }
 
-ul li:last-child:after {
-    content: none;
+ul.footer li:last-child:after {
+    content: '';
+}
+
+ul.result {
+    padding: 0.5em 0;
+    opacity: 0.75;
+}
+
+ul.result li.result-title {
+    font-size: var(--font-size-h3);
+    font-weight: 700;
+}
+
+ul.result li.result-meta {
+    font-size: var(--font-size-h4);
 }
 
 .feature {
-    margin-bottom: 1em;
+    margin-bottom: 0.5em;
+}
+
+.mono {
+    font-family: monospace;
+    font-weight: bold;
+    font-size: calc(var(--font-size-body) * 0.8);
 }
 
 a {
@@ -93,9 +121,7 @@ a:hover {
     text-decoration: underline;
 }
 
-button#start-csv {
-    display: none;
-}
+/* ── Buttons ── */
 
 button {
     background-color: var(--color-bg-button) !important;
@@ -105,18 +131,78 @@ button {
     cursor: pointer;
     text-transform: uppercase;
     border: 0;
-    color: var(--font-size-button);
     border-radius: 3px;
     height: 3rem;
     padding: 0 1rem;
 }
+
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-group button {
+    flex: 1;
+}
+
+/* ── Export UI sections ── */
+
+#btn-group-csv {
+    display: none;
+}
+
+#full-table-status {
+    display: none;
+    margin-top: 0.5em;
+}
+
+#cancel-csv,
+#confirm-no {
+    background-color: var(--color-danger) !important;
+}
+
+#export-result {
+    display: none;
+    margin-top: 1em;
+}
+
+#confirm-modal {
+    display: none;
+    margin-bottom: 0.5em;
+}
+
+#confirm-modal p {
+    margin: 0 0 0.5em;
+    font-size: var(--font-size-h3);
+}
+
+#btn-group-confirm {
+    margin-top: 1em;
+}
+
+/* ── Footer ── */
+
+#footer {
+    font-size: var(--font-size-footer);
+    text-align: right;
+}
+
+#debug-result {
+    float: left;
+}
+
+/* ── Fonts ── */
 
 @font-face {
     font-family: "Montserrat";
     font-style: normal;
     font-weight: 400;
     src: local("Montserrat"), url("montserrat-400.woff2") format("woff2");
-    /* Chrome 26+, Opera 23+, Firefox 39+ */
 }
 
 @font-face {
@@ -124,5 +210,4 @@ button {
     font-style: normal;
     font-weight: 700;
     src: local("Montserrat"), url("montserrat-700.woff2") format("woff2");
-    /* Chrome 26+, Opera 23+, Firefox 39+ */
 }

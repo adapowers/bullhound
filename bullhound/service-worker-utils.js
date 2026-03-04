@@ -5,15 +5,23 @@ const log = function (content) {
     console.log('[Bullhound] ' + content);
 }
 
-// Returns MM-DD-YYYY-HH-MM
+// Returns YYYYMMDDHHMM
 const dateString = function () {
     let d = new Date();
-    return d.getMonth() + '-' + d.getDate() + '-' + d.getFullYear() + '-' + d.getHours() + '-' + d.getMinutes();
+    let month = (d.getMonth() + 1).toString().padStart(2, '0');
+    let day = d.getDate().toString().padStart(2, '0');
+    let year = d.getFullYear();
+    let hours = d.getHours().toString().padStart(2, '0');
+    let minutes = d.getMinutes().toString().padStart(2, '0');
+    return year + month + day + hours + minutes;
 }
 
-// Base64 encode
+// Base64 encode (UTF-8 safe)
 const encode = function (string) {
-    return 'data:text/csv;base64,' + btoa(string);
+    const bytes = new TextEncoder().encode(string);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return 'data:text/csv;base64,' + btoa(binary);
 }
 
 // JSON string -> JSON object
@@ -26,9 +34,15 @@ const convert = function (string) {
     return Papa.unparse(string);
 }
 
+// Turns mixed-case, spaced, underscored strings into filename-safe ones
+const slugify = function (str) {
+    return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'export';
+}
+
 // Builds filename with a safe default, then downloads it
-const download = function (file, prefix = 'bullhorn-table') {
-    let filename = prefix + '-' + dateString() + '.csv';
+// with a suffix (e.g., '-full' or '-p3') for disambiguation
+const download = function (file, prefix = 'bullhorn-table', suffix = '') {
+    let filename = slugify(prefix) + '-' + dateString() + suffix + '.csv';
     chrome.downloads.download({
         url: file,
         filename: filename
