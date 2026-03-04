@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Bullhound",
     "description": "A simple CSV exporter for BullhornOne CMS.",
-    "version": "2024.6",
+    "version": "2026.3",
     "icons": {
         "16": "logo/logo-16.png",
         "48": "logo/logo-48.png",
