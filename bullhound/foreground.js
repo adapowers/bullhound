@@ -419,7 +419,7 @@ const novoFullTableScrape = async () => {
             fileJson.length + ' chars. Sending to worker... \u2500\u2500');
         chrome.runtime.sendMessage({
             from: 'content', subj: 'full-table-complete',
-            prefix, file: fileJson,
+            prefix, file: fileJson, formatName: 'novo',
             meta: {
                 exportedRows,
                 rawRowCount,
@@ -564,7 +564,7 @@ const datagridFullTableScrape = async () => {
 
         chrome.runtime.sendMessage({
             from: 'content', subj: 'full-table-complete',
-            prefix, file: fileJson,
+            prefix, file: fileJson, formatName: 'datagrid',
             meta: { exportedRows, dataChanged: false, dupCount: 0, missedRows: 0, warning }
         });
     } catch (e) {
@@ -680,7 +680,9 @@ const tryFile = () => {
             success: true,
             prefix: fmt.getTitle(),
             currentPage: fmt.currentPage() ?? null,
-            file: JSON.stringify(fmt.prep(fmt.getRoot()))
+            file: JSON.stringify(fmt.prep(fmt.getRoot())),
+            formatName: fmt.name,
+            isFullTable: false
         };
     } catch (e) {
         log('Error transferring file: ' + e.message);

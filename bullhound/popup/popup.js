@@ -68,9 +68,10 @@ const showExportResult = (result) => {
             title = 'Successful export';
             text = 'Page ' + result.currentPage + ' • ' + result.exportedRows.toLocaleString() + ' rows';
         } else {
-            // Clean full-table success
+            // Clean full-table success or visible page for datagrid
             title = 'Successful export';
-            text = 'Full table • ' + result.exportedRows.toLocaleString() + ' rows';
+            const pageText = result.isFullTable ? 'Full table' : (result.formatName === 'datagrid' ? 'Loaded rows only' : 'Full table');
+            text = pageText + ' • ' + result.exportedRows.toLocaleString() + ' rows';
         }
 
         const hint = (result.hint && result.success && !result.warning) ? result.hint : '';
@@ -217,7 +218,9 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
             missedRows: meta.missedRows || 0,
             warning: meta.warning || null,
             hint: meta.hint || null,
-            tableName: m.prefix || null
+            tableName: m.prefix || null,
+            formatName: m.formatName || null,
+            isFullTable: true
         });
         askForUpdate();
         return false;
