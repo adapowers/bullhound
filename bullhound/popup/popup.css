@@ -200,6 +200,10 @@ button:disabled {
     float: left;
 }
 
+#debug-result:after {
+    content: '' !important;
+}
+
 /* ── Fonts ── */
 
 @font-face {
