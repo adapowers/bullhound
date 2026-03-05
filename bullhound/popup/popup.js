@@ -70,7 +70,7 @@ const showExportResult = (result) => {
         } else {
             // Clean full-table success or visible page for datagrid
             title = 'Successful export';
-            const pageText = result.isFullTable ? 'Full table' : (result.formatName === 'datagrid' ? 'Loaded rows only' : 'Full table');
+            const pageText = result.isFullTable ? 'Full table' : (result.formatName === 'datagrid' ? 'Visible page' : 'Full table');
             text = pageText + ' • ' + result.exportedRows.toLocaleString() + ' rows';
         }
 
