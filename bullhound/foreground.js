@@ -622,7 +622,7 @@ const datagridHandler = {
     supportsFullTable: true,
     fullTableScrape: () => datagridFullTableScrape(),
     confirmCopy: [
-        'This will \u201ctake over\u201d your Bullhorn tab temporarily and scroll down until all records are loaded.',
+        'This will \u201ctake over\u201d your Bullhorn tab temporarily and scroll down until all records are loaded for exporting.',
         'You can still use other tabs, but <b>don\u2019t interact with this tab until it finishes.</b>',
         'For best results, stay right here.'
     ]
