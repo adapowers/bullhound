@@ -142,7 +142,7 @@ const askForFile = () => {
         return false;
     }
     if (m.subj === 'full-table-progress' && m.from === 'content') {
-        state.progress = { page: m.page, totalPages: m.totalPages };
+        state.progress = { page: m.page, totalPages: m.totalPages, loadedRows: m.loadedRows || null };
         return false;
     }
     if (m.subj === 'full-table-returning' && m.from === 'content') {
@@ -173,6 +173,7 @@ const askForFile = () => {
                 dataChanged: meta.dataChanged || false,
                 addedDuringExport: meta.addedDuringExport || 0,
                 dupCount: meta.dupCount || 0,
+                missedRows: meta.missedRows || 0,
                 warning: meta.warning || null,
                 tableName: m.prefix || null
             };

@@ -16,7 +16,7 @@
             <h2>CSV Export</h2>
             <div id="status-csv">
             <h3 class="table-status">No Bullhorn table on this page.</h3>
-            <p>If you know this isn't true, try:</p>
+            <p>If you know that isn't true, try:</p>
             <ul class="not-found">
                 <li>Refreshing the page.</li>
                 <li>Clearing your cache <span class="mono">(Ctrl-Shift-Del)</span>.</li>
@@ -31,10 +31,13 @@
                 <button id="cancel-csv">Cancel</button>
             </div>
             <div id="confirm-modal">
-                <p>This will "take over" your Bullhorn tab temporarily and click through every page to build your
+                <!-- Default novo copy; replaced dynamically per format via confirmCopy -->
+                <div id="confirm-copy">
+                <p>This will &#x201c;take over&#x201d; your Bullhorn tab temporarily and click through every page to build your
                     export, then bring you back.</p>
-                <p>You can still use other tabs, but <b>don't interact with this tab until it finishes.</b></p>
+                <p>You can still use other tabs, but <b>don&#x2019;t interact with this tab until it finishes.</b></p>
                 <p>For best results, stay right here.</p>
+                </div>
                 <div class="btn-group" id="btn-group-confirm">
                     <button id="confirm-yes">Start</button>
                     <button id="confirm-no">Nevermind</button>

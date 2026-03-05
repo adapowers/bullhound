@@ -50,8 +50,11 @@ const showExportResult = (result) => {
         } else if (result.dataChanged) {
             // Success with new data captured
             title = 'Successful export';
-            text = 'Full table • ' + result.exportedRows.toLocaleString() + ' rows • '
-            + result.addedDuringExport.toLocaleString() + ' rows picked up during export';
+            text = 'Full table \u2022 ' + result.exportedRows.toLocaleString() + ' rows \u2022 '
+            + result.addedDuringExport.toLocaleString() + ' added during export';
+            if (result.missedRows > 0) {
+                text += ' \u2022 ' + result.missedRows.toLocaleString() + ' couldn\u2019t be captured';
+            }
         } else if (result.currentPage) {
             // Single page success
             title = 'Successful export';
@@ -114,12 +117,18 @@ const showExportStatus = (progressText, cancelLabel = 'CANCEL', cancelDisabled =
     document.getElementById('cancel-csv').disabled = cancelDisabled;
 };
 
-const showRunning = (page, totalPages) => {
-    const text = !page
-        ? 'Starting\u2026 Don\u2019t navigate away.'
-        : totalPages
-            ? `Exported page ${page} of ${totalPages}, loading next\u2026`
-            : `Exported page ${page}\u2026`;
+const showRunning = (page, totalPages, loadedRows) => {
+    let text;
+    if (loadedRows != null && page == null) {
+        // Datagrid: infinite scroll, row-based progress
+        text = `Loaded ${loadedRows.toLocaleString()} rows\u2026`;
+    } else if (!page) {
+        text = 'Starting\u2026 Don\u2019t navigate away.';
+    } else if (totalPages) {
+        text = `Exported page ${page} of ${totalPages}, loading next\u2026`;
+    } else {
+        text = `Exported page ${page}\u2026`;
+    }
     showExportStatus(text);
 };
 
@@ -141,10 +150,16 @@ const askForUpdate = () => {
             }, data => {
                 if (data && data.success) {
                     document.getElementById("status-csv").innerHTML = "<h3>Table: " + data.name + "</h3>";
+                    // Update confirm modal copy if the format provides it
+                    if (data.confirmCopy) {
+                        document.getElementById('confirm-copy').innerHTML =
+                            data.confirmCopy.map(p => '<p>' + p + '</p>').join('');
+                    }
                     // Don't overwrite the export UI if an export is in progress
                     if (!exportActive) {
-                        const onFirstPage = !data.currentPage || data.currentPage <= 1;
-                        showIdle(onFirstPage);
+                        const fullTableEnabled = data.supportsFullTable === true
+                            && (!data.currentPage || data.currentPage <= 1);
+                        showIdle(fullTableEnabled);
                         // Show last export result (only when a table is present)
                         chrome.runtime.sendMessage({ from: 'popup', subj: 'state-query' }, state => {
                             if (state && state.lastExport) showExportResult(state.lastExport);
@@ -167,7 +182,7 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
         return false;
     }
     if (m.subj === 'full-table-progress' && m.from === 'content') {
-        showRunning(m.page, m.totalPages);
+        showRunning(m.page, m.totalPages, m.loadedRows);
         return false;
     }
     if (m.subj === 'full-table-returning' && m.from === 'content') {
@@ -188,6 +203,7 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
             dataChanged: meta.dataChanged || false,
             addedDuringExport: meta.addedDuringExport || 0,
             dupCount: meta.dupCount || 0,
+            missedRows: meta.missedRows || 0,
             warning: meta.warning || null,
             tableName: m.prefix || null
         });
@@ -255,7 +271,7 @@ document.getElementById("cancel-csv").addEventListener("click", e => {
 // On load: check if an export is already running (handles popup-was-closed case)
 chrome.runtime.sendMessage({ from: 'popup', subj: 'state-query' }, data => {
     if (data && data.status === 'running') {
-        showRunning(data.progress.page, data.progress.totalPages);
+        showRunning(data.progress.page, data.progress.totalPages, data.progress.loadedRows);
     } else if (data && data.status === 'returning') {
         showReturning();
     } else if (data && data.status === 'finishing') {
