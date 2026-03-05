@@ -175,6 +175,7 @@ const askForFile = () => {
                 dupCount: meta.dupCount || 0,
                 missedRows: meta.missedRows || 0,
                 warning: meta.warning || null,
+                hint: meta.hint || null,
                 tableName: m.prefix || null
             };
         }

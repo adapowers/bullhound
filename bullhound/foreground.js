@@ -15,7 +15,7 @@ const log = function (content) {
 log('Successfully injected content script');
 
 
-// ── SHARED HELPERS ──
+// SHARED HELPERS
 
 let fullTableActive = false;
 
@@ -54,8 +54,7 @@ const suppressAreYouSureModal = () => {
     return () => { style.remove(); log('Restored are-you-sure modal'); };
 };
 
-
-// ── NOVO FORMAT (novo-data-table, paginated) ──
+// FORMAT: NOVO (novo-data-table, paginated)
 
 const novoCellData = function (cell) {
     if (cell.classList.contains('novo-column-preview')) { return ''; }
@@ -386,7 +385,7 @@ const novoFullTableScrape = async () => {
         }
 
         // Always count duplicates for integrity reporting.
-        // Only actually remove them if data changed (pushed rows between pages).
+        // Only actually remove them if data changed (pushed rows between pages)
         const rawRowCount = allData ? allData.length - 1 : 0;
         const { data: dedupedData, dupCount } = deduplicateRows(allData);
         let warning = null;
@@ -405,12 +404,10 @@ const novoFullTableScrape = async () => {
 
         // Check if we're still short compared to the known total
         missedRows = Math.max(0, initialTotal - exportedRows);
+        let hint = null;
         if (missedRows > 0) {
             log('Missed ' + missedRows + ' row(s) — likely added to a page we already scraped');
-            if (!warning) {
-                warning = missedRows + ' row(s) added during export could not be captured '
-                    + '(inserted into an already-scraped page)';
-            }
+            hint = 'The table changed while exporting. For the very latest data, run it again.';
         }
 
         log('Final tally: total=' + initialTotal + ', exported=' + exportedRows +
@@ -430,7 +427,8 @@ const novoFullTableScrape = async () => {
                 addedDuringExport: dataChanged ? Math.max(0, initialTotal - startingTotal) : 0,
                 dupCount,
                 missedRows,
-                warning
+                warning,
+                hint
             }
         });
     } catch (e) {
@@ -444,7 +442,7 @@ const novoFullTableScrape = async () => {
 };
 
 
-// ── DATAGRID FORMAT (bh-datagrid, infinite scroll) ──
+// FORMAT: DATAGRID (bh-datagrid, infinite scroll)
 
 const datagridPrep = (root) => {
     const csv = [];
@@ -455,14 +453,21 @@ const datagridPrep = (root) => {
     });
     csv.push(headers);
 
+    // Count header <th> elements (including empty ones like checkbox column)
+    // vs. non-empty headers to find the offset, just like Novo's preview column
+    const allThs = root.querySelectorAll('table.grid-header th').length;
+    const offset = allThs - headers.length;
+
     root.querySelectorAll('table.grid-body tr.table-row').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
         const row = [];
-        tr.querySelectorAll('td').forEach(td => {
+        for (let i = offset; i < tds.length; i++) {
+            const td = tds[i];
             const link = td.querySelector('.cell-container a.grid-cell-link');
             const span = td.querySelector('.cell-container span.grid-cell');
             row.push((link || span)?.textContent?.trim() || '');
-        });
-        if (row.length === headers.length) csv.push(row);
+        }
+        if (row.length > 0) csv.push(row);
     });
     return csv;
 };
@@ -472,19 +477,23 @@ const datagridFullTableScrape = async () => {
     log('** Full table scrape started (datagrid) **');
     const restoreModal = suppressAreYouSureModal();
     try {
-        const prefix = getActiveFormat()?.getTitle() || 'bullhorn-table';
-        log('Table: ' + prefix);
+        const fmt = getActiveFormat();
+        const root = fmt?.getRoot() || document;
+        const prefix = fmt?.getTitle() || 'bullhorn-table';
+        log('Table: ' + prefix + ' (root: ' + (root === document ? 'top' : 'iframe') + ')');
 
-        // Find the scrollable container for the grid body
-        const scrollContainer = document.querySelector('.grid-body-container')
-            || document.querySelector('.bh-datagrid')
-            || document.documentElement;
+        // The bh-datagrid infinite scroll is driven by a div.scrollable[bh-scroll]
+        // inside the datagrid. Fall back to broader searches if that changes.
+        const scrollContainer = root.querySelector('.scrollable[bh-scroll]')
+            || root.querySelector('.grid-body-container')
+            || root.querySelector('.bh-datagrid')
+            || root.documentElement;
 
         let lastRowCount = 0;
         let stallCount = 0;
 
         while (fullTableActive) {
-            const currentCount = document.querySelectorAll('table.grid-body tr.table-row').length;
+            const currentCount = root.querySelectorAll('table.grid-body tr.table-row').length;
 
             chrome.runtime.sendMessage({
                 from: 'content', subj: 'full-table-progress',
@@ -492,7 +501,7 @@ const datagridFullTableScrape = async () => {
             });
 
             // Check for "No More Records"
-            const loadMoreText = document.querySelector('.load-more-text');
+            const loadMoreText = root.querySelector('.load-more-text');
             if (loadMoreText && /no more records/i.test(loadMoreText.textContent)) {
                 log('Reached end: "No More Records" (' + currentCount + ' rows)');
                 break;
@@ -507,13 +516,13 @@ const datagridFullTableScrape = async () => {
             let settled = false;
             while (Date.now() - start < 10000) {
                 await sleep(300);
-                const newCount = document.querySelectorAll('table.grid-body tr.table-row').length;
+                const newCount = root.querySelectorAll('table.grid-body tr.table-row').length;
                 if (newCount > currentCount) { settled = true; break; }
-                const lmt = document.querySelector('.load-more-text');
+                const lmt = root.querySelector('.load-more-text');
                 if (lmt && /no more records/i.test(lmt.textContent)) { settled = true; break; }
             }
 
-            const newCount = document.querySelectorAll('table.grid-body tr.table-row').length;
+            const newCount = root.querySelectorAll('table.grid-body tr.table-row').length;
             log('After scroll: ' + newCount + ' rows (was ' + currentCount + ')');
 
             if (newCount === lastRowCount) {
@@ -530,23 +539,33 @@ const datagridFullTableScrape = async () => {
         }
 
         if (!fullTableActive) {
-            log('Export cancelled during scroll loading');
+            log('Export canceled during scroll loading');
             chrome.runtime.sendMessage({ from: 'content', subj: 'full-table-cancelled', prefix });
             return;
         }
 
-        // All rows are now in the DOM — scrape them all at once
-        const allData = datagridPrep(document);
+        const stalled = stallCount >= 3;
+        const warning = stalled
+            ? ', but the table stalled out while trying to load new ones. Some entries might be missing. If this is a problem, try running the export again.'
+            : null;
+
+        // All rows are now in the DOM, so we can scrape them all at once
+        const allData = datagridPrep(root);
         const exportedRows = allData.length - 1;
 
+        // Scroll back to the top
+        scrollContainer.scrollTop = 0;
+        log('Scrolled back to top');
+
         const fileJson = JSON.stringify(allData);
-        log('\u2500\u2500 Datagrid export complete: ' + exportedRows + ' rows, ' +
+        log('\u2500\u2500 Datagrid export complete: ' + exportedRows + ' rows' +
+            (stalled ? ' (stalled)' : '') + ', ' +
             fileJson.length + ' chars. Sending to worker... \u2500\u2500');
 
         chrome.runtime.sendMessage({
             from: 'content', subj: 'full-table-complete',
             prefix, file: fileJson,
-            meta: { exportedRows, dataChanged: false, dupCount: 0, missedRows: 0 }
+            meta: { exportedRows, dataChanged: false, dupCount: 0, missedRows: 0, warning }
         });
     } catch (e) {
         log('Datagrid full table error: ' + e.message);
@@ -559,7 +578,14 @@ const datagridFullTableScrape = async () => {
 };
 
 
-// ── FORMAT HANDLER DEFINITIONS ──
+// FORMAT HANDLER DEFINITIONS
+
+// Shared iframe accessor: returns the active iframe's document, or null
+const getIframeDoc = () => {
+    try {
+        return document.querySelector('iframe.active')?.contentWindow?.document || null;
+    } catch (e) { return null; }
+};
 
 const novoHandler = {
     name: 'novo',
@@ -579,17 +605,24 @@ const novoHandler = {
 
 const datagridHandler = {
     name: 'datagrid',
-    detect: () => !!document.querySelector('.bh-datagrid'),
-    getTitle: () =>
-        document.querySelector('.section-header-title, .listpane h2, .bh-datagrid-header h2')
-            ?.textContent?.trim() || 'bullhorn-table',
-    getRoot: () => document,
+    detect: () => {
+        // Check top-level first, then inside iframe.active
+        if (document.querySelector('.bh-datagrid')) return true;
+        const doc = getIframeDoc();
+        return doc ? !!doc.querySelector('.bh-datagrid') : false;
+    },
+    getTitle: () => {
+        const root = document.querySelector('.bh-datagrid') ? document : getIframeDoc();
+        return root?.querySelector('.page-title, .section-header-title, .listpane h2')
+            ?.textContent?.trim() || root?.title?.trim() || 'bullhorn-table';
+    },
+    getRoot: () => document.querySelector('.bh-datagrid') ? document : (getIframeDoc() || document),
     prep: (root) => datagridPrep(root),
     currentPage: () => null,
     supportsFullTable: true,
     fullTableScrape: () => datagridFullTableScrape(),
     confirmCopy: [
-        'This will scroll through the entire list to load all records before exporting.',
+        'This will \u201ctake over\u201d your Bullhorn tab temporarily and scroll down until all records are loaded.',
         'You can still use other tabs, but <b>don\u2019t interact with this tab until it finishes.</b>',
         'For best results, stay right here.'
     ]
@@ -621,7 +654,7 @@ const formats = [novoHandler, datagridHandler, iframeHandler];
 const getActiveFormat = () => formats.find(f => f.detect()) || null;
 
 
-// ── FORMAT-AGNOSTIC API ──
+// FORMAT-AGNOSTIC API
 
 const tryUpdate = () => {
     try {
@@ -656,7 +689,7 @@ const tryFile = () => {
 };
 
 
-// ── TABLE DETECTION & HEARTBEAT ──
+// TABLE DETECTION & HEARTBEAT
 
 const probeForTable = () => {
     const result = tryUpdate();
@@ -704,7 +737,7 @@ if (document.readyState === 'complete') {
 }
 
 
-// ── MESSAGE LISTENER ──
+// MESSAGE LISTENER
 
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
     if (

@@ -42,11 +42,19 @@ const showExportResult = (result) => {
                 text = '';
             }
         } else if (result.warning) {
-            // Scrape glitch
-            title = '!!! Data integrity warning !!!';
-            text = 'Exported '
-                + result.exportedRows.toLocaleString()
-                + ' rows, but found/removed duplicates even though there shouldn\u2019t have been any. Try again!'
+            if (result.dupCount > 0) {
+                // Novo scrape glitch: unexpected duplicates
+                title = '!!! Data integrity warning !!!';
+                text = 'Exported '
+                    + result.exportedRows.toLocaleString()
+                    + ' rows, but found/removed duplicates even though there shouldn\u2019t have been any. Try again!';
+            } else {
+                // Other warnings (e.g., datagrid stall)
+                title = '! Warning';
+                text = result.exportedRows
+                    ? 'Exported ' + result.exportedRows.toLocaleString() + ' rows. ' + result.warning
+                    : result.warning;
+            }
         } else if (result.dataChanged) {
             // Success with new data captured
             title = 'Successful export';
@@ -65,11 +73,14 @@ const showExportResult = (result) => {
             text = 'Full table • ' + result.exportedRows.toLocaleString() + ' rows';
         }
 
+        const hint = (result.hint && result.success && !result.warning) ? result.hint : '';
+
         el.innerHTML = `
         <hr/>
         <ul class="result">
             <li class="result-title">${title}</li>
             <li class="result-text">${text}</li>
+            ${hint ? `<li class="result-hint">${hint}</li>` : ''}
             <li class="result-meta">${from} • ${ago}</li>
         </ul>
         `;
@@ -205,6 +216,7 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
             dupCount: meta.dupCount || 0,
             missedRows: meta.missedRows || 0,
             warning: meta.warning || null,
+            hint: meta.hint || null,
             tableName: m.prefix || null
         });
         askForUpdate();

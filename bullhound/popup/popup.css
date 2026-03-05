@@ -98,6 +98,10 @@ ul.result li.result-title {
     font-weight: 700;
 }
 
+ul.result li.result-hint {
+    font-style: italic;
+}
+
 ul.result li.result-meta {
     font-size: var(--font-size-h4);
 }
