@@ -42,31 +42,46 @@ const showExportResult = (result) => {
                 text = '';
             }
         } else if (result.warning) {
-            // Scrape glitch
-            title = '!!! Data integrity warning !!!';
-            text = 'Exported '
-                + result.exportedRows.toLocaleString()
-                + ' rows, but found/removed duplicates even though there shouldn\u2019t have been any. Try again!'
+            if (result.dupCount > 0) {
+                // Novo scrape glitch: unexpected duplicates
+                title = '!!! Data integrity warning !!!';
+                text = 'Exported '
+                    + result.exportedRows.toLocaleString()
+                    + ' rows, but found/removed duplicates even though there shouldn\u2019t have been any. Try again!';
+            } else {
+                // Other warnings (e.g., datagrid stall)
+                title = '! Warning';
+                text = result.exportedRows
+                    ? 'Exported ' + result.exportedRows.toLocaleString() + ' rows. ' + result.warning
+                    : result.warning;
+            }
         } else if (result.dataChanged) {
             // Success with new data captured
             title = 'Successful export';
-            text = 'Full table • ' + result.exportedRows.toLocaleString() + ' rows • '
-            + result.addedDuringExport.toLocaleString() + ' rows picked up during export';
+            text = 'Full table \u2022 ' + result.exportedRows.toLocaleString() + ' rows \u2022 '
+            + result.addedDuringExport.toLocaleString() + ' added during export';
+            if (result.missedRows > 0) {
+                text += ' \u2022 ' + result.missedRows.toLocaleString() + ' couldn\u2019t be captured';
+            }
         } else if (result.currentPage) {
             // Single page success
             title = 'Successful export';
             text = 'Page ' + result.currentPage + ' • ' + result.exportedRows.toLocaleString() + ' rows';
         } else {
-            // Clean full-table success
+            // Clean full-table success or visible page for datagrid
             title = 'Successful export';
-            text = 'Full table • ' + result.exportedRows.toLocaleString() + ' rows';
+            const pageText = result.isFullTable ? 'Full table' : (result.formatName === 'datagrid' ? 'Visible page' : 'Full table');
+            text = pageText + ' • ' + result.exportedRows.toLocaleString() + ' rows';
         }
+
+        const hint = (result.hint && result.success && !result.warning) ? result.hint : '';
 
         el.innerHTML = `
         <hr/>
         <ul class="result">
             <li class="result-title">${title}</li>
             <li class="result-text">${text}</li>
+            ${hint ? `<li class="result-hint">${hint}</li>` : ''}
             <li class="result-meta">${from} • ${ago}</li>
         </ul>
         `;
@@ -114,12 +129,18 @@ const showExportStatus = (progressText, cancelLabel = 'CANCEL', cancelDisabled =
     document.getElementById('cancel-csv').disabled = cancelDisabled;
 };
 
-const showRunning = (page, totalPages) => {
-    const text = !page
-        ? 'Starting\u2026 Don\u2019t navigate away.'
-        : totalPages
-            ? `Exported page ${page} of ${totalPages}, loading next\u2026`
-            : `Exported page ${page}\u2026`;
+const showRunning = (page, totalPages, loadedRows) => {
+    let text;
+    if (loadedRows != null && page == null) {
+        // Datagrid: infinite scroll, row-based progress
+        text = `Loaded ${loadedRows.toLocaleString()} rows\u2026`;
+    } else if (!page) {
+        text = 'Starting\u2026 Don\u2019t navigate away.';
+    } else if (totalPages) {
+        text = `Exported page ${page} of ${totalPages}, loading next\u2026`;
+    } else {
+        text = `Exported page ${page}\u2026`;
+    }
     showExportStatus(text);
 };
 
@@ -141,10 +162,16 @@ const askForUpdate = () => {
             }, data => {
                 if (data && data.success) {
                     document.getElementById("status-csv").innerHTML = "<h3>Table: " + data.name + "</h3>";
+                    // Update confirm modal copy if the format provides it
+                    if (data.confirmCopy) {
+                        document.getElementById('confirm-copy').innerHTML =
+                            data.confirmCopy.map(p => '<p>' + p + '</p>').join('');
+                    }
                     // Don't overwrite the export UI if an export is in progress
                     if (!exportActive) {
-                        const onFirstPage = !data.currentPage || data.currentPage <= 1;
-                        showIdle(onFirstPage);
+                        const fullTableEnabled = data.supportsFullTable === true
+                            && (!data.currentPage || data.currentPage <= 1);
+                        showIdle(fullTableEnabled);
                         // Show last export result (only when a table is present)
                         chrome.runtime.sendMessage({ from: 'popup', subj: 'state-query' }, state => {
                             if (state && state.lastExport) showExportResult(state.lastExport);
@@ -167,7 +194,7 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
         return false;
     }
     if (m.subj === 'full-table-progress' && m.from === 'content') {
-        showRunning(m.page, m.totalPages);
+        showRunning(m.page, m.totalPages, m.loadedRows);
         return false;
     }
     if (m.subj === 'full-table-returning' && m.from === 'content') {
@@ -188,8 +215,12 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
             dataChanged: meta.dataChanged || false,
             addedDuringExport: meta.addedDuringExport || 0,
             dupCount: meta.dupCount || 0,
+            missedRows: meta.missedRows || 0,
             warning: meta.warning || null,
-            tableName: m.prefix || null
+            hint: meta.hint || null,
+            tableName: m.prefix || null,
+            formatName: m.formatName || null,
+            isFullTable: true
         });
         askForUpdate();
         return false;
@@ -255,7 +286,7 @@ document.getElementById("cancel-csv").addEventListener("click", e => {
 // On load: check if an export is already running (handles popup-was-closed case)
 chrome.runtime.sendMessage({ from: 'popup', subj: 'state-query' }, data => {
     if (data && data.status === 'running') {
-        showRunning(data.progress.page, data.progress.totalPages);
+        showRunning(data.progress.page, data.progress.totalPages, data.progress.loadedRows);
     } else if (data && data.status === 'returning') {
         showReturning();
     } else if (data && data.status === 'finishing') {

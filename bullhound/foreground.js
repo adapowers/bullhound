@@ -14,51 +14,49 @@ const log = function (content) {
 
 log('Successfully injected content script');
 
-// Proactively check for a table once the page is ready, so the
-// extension icon can turn color before the popup is ever opened.
-const probeForTable = () => {
-    const result = tryUpdate();
-    chrome.runtime.sendMessage({ from: 'content', subj: 'table-status', found: result.success });
-    if (result.success) {
-        log('Found table: ' + result.name);
-    }
-};
 
-const initProbe = () => {
-    // Bullhorn is an SPA, so the table may not exist yet even after load.
-    // Give Angular time to render before first check.
-    setTimeout(probeForTable, 3000);
+// SHARED HELPERS
 
-    // Re-probe when the SPA navigates by watching for novo-title appearing/disappearing
-    let lastFound = null;
-    new MutationObserver(() => {
-        const found = !!document.querySelector('[novo-title]');
-        if (found !== lastFound) {
-            lastFound = found;
-            // Brief delay so Angular finishes rendering the new view
-            setTimeout(probeForTable, 1000);
+let fullTableActive = false;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Deduplicate rows (keeps headers at index 0).
+// Returns { data, dupCount } so callers can inspect without side effects.
+const deduplicateRows = (data) => {
+    if (!data || data.length <= 1) return { data, dupCount: 0 };
+    const seen = new Set();
+    const deduped = [data[0]]; // headers
+    for (let i = 1; i < data.length; i++) {
+        const key = JSON.stringify(data[i]);
+        if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(data[i]);
         }
-    }).observe(document.body, { childList: true, subtree: true });
-
-    // Periodic heartbeat: re-send table status every 5s so the icon
-    // stays correct even if the service worker restarts after going idle.
-    setInterval(() => {
-        const found = !!document.querySelector('[novo-title]');
-        chrome.runtime.sendMessage(
-            { from: 'content', subj: 'table-status', found },
-            () => { if (chrome.runtime.lastError) { /* worker not ready */ } }
-        );
-    }, 5000);
+    }
+    const dupCount = data.length - deduped.length;
+    if (dupCount > 0) log('Found ' + dupCount + ' duplicate rows');
+    return { data: deduped, dupCount };
 };
 
-if (document.readyState === 'complete') {
-    initProbe();
-} else {
-    window.addEventListener('load', initProbe);
-}
+// Hide the Bullhorn "are you sure" modal + overlay that appears
+// if it thinks we're navigating too fast. Only hides during export.
+// Returns a cleanup function that removes the injected style.
+const suppressAreYouSureModal = () => {
+    const style = document.createElement('style');
+    style.id = 'bullhound-suppress-modal';
+    style.textContent =
+        'are-you-sure-modal, [data-automation-id="are-you-sure-modal"],' +
+        '.modal-overlay-backdrop, .aside-overlay-backdrop' +
+        '{ display: none !important; }';
+    document.head.appendChild(style);
+    log('Suppressing are-you-sure modal');
+    return () => { style.remove(); log('Restored are-you-sure modal'); };
+};
 
+// FORMAT: NOVO (novo-data-table, paginated)
 
-const getCellData = function (cell) {
+const novoCellData = function (cell) {
     if (cell.classList.contains('novo-column-preview')) { return ''; }
     else if (cell.getElementsByTagName('a')[0]) { return cell.getElementsByTagName('a')[0].innerHTML; }
     else if (cell.getElementsByTagName('span')[0]) { return cell.getElementsByTagName('span')[0].innerHTML; }
@@ -66,8 +64,7 @@ const getCellData = function (cell) {
     else return '';
 }
 
-// Where the majority of the magic happens
-const prep = function (frame) {
+const novoPrep = function (frame) {
     let table = [];
     table.headers = [];
     table.rows = [];
@@ -90,8 +87,8 @@ const prep = function (frame) {
         table.rows[i].cells = [];
         csv[i + 1] = [];
         for (let j = 0; j < cells.length - offset; j++) {
-            table.rows[i].cells[j] = getCellData(cells[j + offset]);
-            csv[i + 1].push(getCellData(cells[j + offset]));
+            table.rows[i].cells[j] = novoCellData(cells[j + offset]);
+            csv[i + 1].push(novoCellData(cells[j + offset]));
         }
 
     }
@@ -101,67 +98,7 @@ const prep = function (frame) {
     return csv;
 }
 
-
-// CONTENT
-const tryUpdate = () => {
-    try {
-        // Newer format: content in page (no iframe), novo-title is an attribute
-        let titleEl = document.querySelector('[novo-title]');
-        if (titleEl) {
-            return {
-                success: true,
-                name: titleEl.innerHTML,
-                currentPage: getCurrentPage()
-            }
-        }
-        // Older format: content in iframe, novo-title is an element
-        let frame = document.querySelector('iframe.active').contentWindow.document;
-        return {
-            success: true,
-            name: frame.querySelector('novo-title').innerHTML
-        }
-    }
-    catch (e) {
-        return {
-            success: false
-        }
-    }
-}
-// CONTENT
-const tryFile = () => {
-    try {
-        // Newer format: content in page (no iframe), novo-title is an attribute
-        let titleEl = document.querySelector('[novo-title]');
-        if (titleEl) {
-            return {
-                success: true,
-                prefix: titleEl.innerHTML,
-                currentPage: getCurrentPage(),
-                file: JSON.stringify(prep(document))
-            }
-        }
-        // Older format: content in iframe, novo-title is an element
-        let frame = document.querySelector('iframe.active').contentWindow.document;
-        return {
-            success: true,
-            prefix: frame.querySelector('.header-title span').innerHTML,
-            file: JSON.stringify(prep(frame))
-        }
-    }
-    catch (e) {
-        log('Error transferring file');
-        return {
-            success: false
-        }
-    }
-}
-
-
-// FULL-TABLE HELPERS
-
-let fullTableActive = false;
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Novo pagination helpers
 
 const getCurrentPage = () =>
     parseInt(document.querySelector('ul[data-automation-id="pager"] li.page.active')
@@ -330,43 +267,10 @@ const restoreItemsPerPage = async (originalSize) => {
     }
 };
 
-// Deduplicate rows (keeps headers at index 0).
-// Returns { data, dupCount } so callers can inspect without side effects.
-const deduplicateRows = (data) => {
-    if (!data || data.length <= 1) return { data, dupCount: 0 };
-    const seen = new Set();
-    const deduped = [data[0]]; // headers
-    for (let i = 1; i < data.length; i++) {
-        const key = JSON.stringify(data[i]);
-        if (!seen.has(key)) {
-            seen.add(key);
-            deduped.push(data[i]);
-        }
-    }
-    const dupCount = data.length - deduped.length;
-    if (dupCount > 0) log('Found ' + dupCount + ' duplicate rows');
-    return { data: deduped, dupCount };
-};
-
-// Hide the Bullhorn "are you sure" modal + overlay that appears
-// if it thinks we're navigating too fast. Only hides during export.
-// Returns a cleanup function that removes the injected style.
-const suppressAreYouSureModal = () => {
-    const style = document.createElement('style');
-    style.id = 'bullhound-suppress-modal';
-    style.textContent =
-        'are-you-sure-modal, [data-automation-id="are-you-sure-modal"],' +
-        '.modal-overlay-backdrop, .aside-overlay-backdrop' +
-        '{ display: none !important; }';
-    document.head.appendChild(style);
-    log('Suppressing are-you-sure modal');
-    return () => { style.remove(); log('Restored are-you-sure modal'); };
-};
-
-// Main full-table scrape loop. Runs detached (not awaited by the message listener).
-const fullTableScrape = async () => {
+// Main novo full-table scrape loop. Runs detached (not awaited by the message listener).
+const novoFullTableScrape = async () => {
     fullTableActive = true;
-    log('** Full table scrape started *');
+    log('** Full table scrape started (novo) **');
     const restoreModal = suppressAreYouSureModal();
     try {
         const titleEl = document.querySelector('[novo-title]');
@@ -414,7 +318,7 @@ const fullTableScrape = async () => {
                     ? Math.ceil(currentTotal / pageSize) : null;
             }
 
-            const pageData = prep(document);
+            const pageData = novoPrep(document);
             const pageRows = pageData.length - (allData === null ? 1 : 0);
             allData = allData === null ? pageData : allData.concat(pageData.slice(1));
             log('Page ' + pageNum + ': scraped ' + (pageData.length - 1) +
@@ -457,19 +361,31 @@ const fullTableScrape = async () => {
         await goToFirstPage(skippable);
         log('Back at page ' + getCurrentPage());
 
+        // Restore original items-per-page setting BEFORE re-capture
+        // (triggers a page reload, giving us the freshest data)
+        await restoreItemsPerPage(originalPageSize);
+
         // If data changed, re-scrape page 1 to catch any rows pushed down
+        let missedRows = 0;
         if (dataChanged && getCurrentPage() === 1) {
             await waitForPageLoad(1);
-            const freshPage1 = prep(document);
+
+            // Check if even more rows were added during the return trip
+            const returnTotal = getTotalRows();
+            if (returnTotal !== initialTotal) {
+                log('Total changed again during return: ' + initialTotal + ' \u2192 ' + returnTotal);
+                const addedDuringReturn = returnTotal - initialTotal;
+                initialTotal = returnTotal;
+                log(addedDuringReturn + ' row(s) added during return navigation');
+            }
+
+            const freshPage1 = novoPrep(document);
             allData = allData.concat(freshPage1.slice(1));
             log('Re-captured page 1: ' + (freshPage1.length - 1) + ' rows');
         }
 
-        // Restore original items-per-page setting
-        await restoreItemsPerPage(originalPageSize);
-
         // Always count duplicates for integrity reporting.
-        // Only actually remove them if data changed (pushed rows between pages).
+        // Only actually remove them if data changed (pushed rows between pages)
         const rawRowCount = allData ? allData.length - 1 : 0;
         const { data: dedupedData, dupCount } = deduplicateRows(allData);
         let warning = null;
@@ -486,20 +402,33 @@ const fullTableScrape = async () => {
 
         const exportedRows = allData ? allData.length - 1 : 0;
 
+        // Check if we're still short compared to the known total
+        missedRows = Math.max(0, initialTotal - exportedRows);
+        let hint = null;
+        if (missedRows > 0) {
+            log('Missed ' + missedRows + ' row(s) — likely added to a page we already scraped');
+            hint = 'The table changed while exporting. For the very latest data, run it again.';
+        }
+
+        log('Final tally: total=' + initialTotal + ', exported=' + exportedRows +
+            ', missed=' + missedRows + ', dupsRemoved=' + dupCount);
+
         // Send download
         const fileJson = JSON.stringify(allData);
-        log('── Export complete: ' + exportedRows + ' rows, ' +
-            fileJson.length + ' chars. Sending to worker... ──');
+        log('\u2500\u2500 Export complete: ' + exportedRows + ' rows, ' +
+            fileJson.length + ' chars. Sending to worker... \u2500\u2500');
         chrome.runtime.sendMessage({
             from: 'content', subj: 'full-table-complete',
-            prefix, file: fileJson,
+            prefix, file: fileJson, formatName: 'novo',
             meta: {
                 exportedRows,
                 rawRowCount,
                 dataChanged,
                 addedDuringExport: dataChanged ? Math.max(0, initialTotal - startingTotal) : 0,
                 dupCount,
-                warning
+                missedRows,
+                warning,
+                hint
             }
         });
     } catch (e) {
@@ -513,7 +442,305 @@ const fullTableScrape = async () => {
 };
 
 
-// CONTENT
+// FORMAT: DATAGRID (bh-datagrid, infinite scroll)
+
+const datagridPrep = (root) => {
+    const csv = [];
+    const headers = [];
+    root.querySelectorAll('table.grid-header th .menu-label-text').forEach(el => {
+        const text = el.textContent.trim();
+        if (text) headers.push(text);
+    });
+    csv.push(headers);
+
+    // Count header <th> elements (including empty ones like checkbox column)
+    // vs. non-empty headers to find the offset, just like Novo's preview column
+    const allThs = root.querySelectorAll('table.grid-header th').length;
+    const offset = allThs - headers.length;
+
+    root.querySelectorAll('table.grid-body tr.table-row').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        const row = [];
+        for (let i = offset; i < tds.length; i++) {
+            const td = tds[i];
+            const link = td.querySelector('.cell-container a.grid-cell-link');
+            const span = td.querySelector('.cell-container span.grid-cell');
+            row.push((link || span)?.textContent?.trim() || '');
+        }
+        if (row.length > 0) csv.push(row);
+    });
+    return csv;
+};
+
+const datagridFullTableScrape = async () => {
+    fullTableActive = true;
+    log('** Full table scrape started (datagrid) **');
+    const restoreModal = suppressAreYouSureModal();
+    try {
+        const fmt = getActiveFormat();
+        const root = fmt?.getRoot() || document;
+        const prefix = fmt?.getTitle() || 'bullhorn-table';
+        log('Table: ' + prefix + ' (root: ' + (root === document ? 'top' : 'iframe') + ')');
+
+        // The bh-datagrid infinite scroll is driven by a div.scrollable[bh-scroll]
+        // inside the datagrid. Fall back to broader searches if that changes.
+        const scrollContainer = root.querySelector('.scrollable[bh-scroll]')
+            || root.querySelector('.grid-body-container')
+            || root.querySelector('.bh-datagrid')
+            || root.documentElement;
+
+        let lastRowCount = 0;
+        let stallCount = 0;
+
+        while (fullTableActive) {
+            const currentCount = root.querySelectorAll('table.grid-body tr.table-row').length;
+
+            chrome.runtime.sendMessage({
+                from: 'content', subj: 'full-table-progress',
+                page: null, totalPages: null, loadedRows: currentCount
+            });
+
+            // Check for "No More Records"
+            const loadMoreText = root.querySelector('.load-more-text');
+            if (loadMoreText && /no more records/i.test(loadMoreText.textContent)) {
+                log('Reached end: "No More Records" (' + currentCount + ' rows)');
+                break;
+            }
+
+            // Scroll to bottom to trigger infinite scroll
+            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+            log('Scrolled to bottom, waiting for new rows... (current: ' + currentCount + ')');
+
+            // Wait for new rows to load (up to 10s)
+            const start = Date.now();
+            let settled = false;
+            while (Date.now() - start < 10000) {
+                await sleep(300);
+                const newCount = root.querySelectorAll('table.grid-body tr.table-row').length;
+                if (newCount > currentCount) { settled = true; break; }
+                const lmt = root.querySelector('.load-more-text');
+                if (lmt && /no more records/i.test(lmt.textContent)) { settled = true; break; }
+            }
+
+            const newCount = root.querySelectorAll('table.grid-body tr.table-row').length;
+            log('After scroll: ' + newCount + ' rows (was ' + currentCount + ')');
+
+            if (newCount === lastRowCount) {
+                stallCount++;
+                log('Stall count: ' + stallCount);
+                if (stallCount >= 3) {
+                    log('Stalled after 3 consecutive attempts with no new rows');
+                    break;
+                }
+            } else {
+                stallCount = 0;
+            }
+            lastRowCount = newCount;
+        }
+
+        if (!fullTableActive) {
+            log('Export canceled during scroll loading');
+            chrome.runtime.sendMessage({ from: 'content', subj: 'full-table-cancelled', prefix });
+            return;
+        }
+
+        const stalled = stallCount >= 3;
+        const warning = stalled
+            ? ', but the table stalled out while trying to load new ones. Some entries might be missing. If this is a problem, try running the export again.'
+            : null;
+
+        // All rows are now in the DOM, so we can scrape them all at once
+        const allData = datagridPrep(root);
+        const exportedRows = allData.length - 1;
+
+        // Scroll back to the top
+        scrollContainer.scrollTop = 0;
+        log('Scrolled back to top');
+
+        const fileJson = JSON.stringify(allData);
+        log('\u2500\u2500 Datagrid export complete: ' + exportedRows + ' rows' +
+            (stalled ? ' (stalled)' : '') + ', ' +
+            fileJson.length + ' chars. Sending to worker... \u2500\u2500');
+
+        chrome.runtime.sendMessage({
+            from: 'content', subj: 'full-table-complete',
+            prefix, file: fileJson, formatName: 'datagrid',
+            meta: { exportedRows, dataChanged: false, dupCount: 0, missedRows: 0, warning }
+        });
+    } catch (e) {
+        log('Datagrid full table error: ' + e.message);
+        chrome.runtime.sendMessage({ from: 'content', subj: 'full-table-cancelled',
+            prefix: 'datagrid-table' });
+    } finally {
+        fullTableActive = false;
+        restoreModal();
+    }
+};
+
+
+// FORMAT HANDLER DEFINITIONS
+
+// Shared iframe accessor: returns the active iframe's document, or null
+const getIframeDoc = () => {
+    try {
+        return document.querySelector('iframe.active')?.contentWindow?.document || null;
+    } catch (e) { return null; }
+};
+
+const novoHandler = {
+    name: 'novo',
+    detect: () => !!document.querySelector('[novo-title]'),
+    getTitle: () => document.querySelector('[novo-title]')?.innerHTML?.trim() || 'bullhorn-table',
+    getRoot: () => document,
+    prep: (root) => novoPrep(root),
+    currentPage: () => getCurrentPage(),
+    supportsFullTable: true,
+    fullTableScrape: () => novoFullTableScrape(),
+    confirmCopy: [
+        'This will \u201ctake over\u201d your Bullhorn tab temporarily and click through every page to build your export, then bring you back.',
+        'You can still use other tabs, but <b>don\u2019t interact with this tab until it finishes.</b>',
+        'For best results, stay right here.'
+    ]
+};
+
+const datagridHandler = {
+    name: 'datagrid',
+    detect: () => {
+        // Check top-level first, then inside iframe.active
+        if (document.querySelector('.bh-datagrid')) return true;
+        const doc = getIframeDoc();
+        return doc ? !!doc.querySelector('.bh-datagrid') : false;
+    },
+    getTitle: () => {
+        const root = document.querySelector('.bh-datagrid') ? document : getIframeDoc();
+        return root?.querySelector('.page-title, .section-header-title, .listpane h2')
+            ?.textContent?.trim() || root?.title?.trim() || 'bullhorn-table';
+    },
+    getRoot: () => document.querySelector('.bh-datagrid') ? document : (getIframeDoc() || document),
+    prep: (root) => datagridPrep(root),
+    currentPage: () => null,
+    supportsFullTable: true,
+    fullTableScrape: () => datagridFullTableScrape(),
+    confirmCopy: [
+        'This will \u201ctake over\u201d your Bullhorn tab temporarily and scroll down until all records are loaded for exporting.',
+        'You can still use other tabs, but <b>don\u2019t interact with this tab until it finishes.</b>',
+        'For best results, stay right here.'
+    ]
+};
+
+const iframeHandler = {
+    name: 'iframe',
+    detect: () => {
+        try {
+            return !!document.querySelector('iframe.active')
+                ?.contentWindow?.document?.querySelector('novo-title');
+        } catch (e) { return false; }
+    },
+    getTitle: () => {
+        try {
+            return document.querySelector('iframe.active')
+                .contentWindow.document.querySelector('.header-title span').innerHTML;
+        } catch (e) { return 'bullhorn-table'; }
+    },
+    getRoot: () => document.querySelector('iframe.active').contentWindow.document,
+    prep: (root) => novoPrep(root),
+    currentPage: () => null,
+    supportsFullTable: false,
+    fullTableScrape: null,
+    confirmCopy: null
+};
+
+const formats = [novoHandler, datagridHandler, iframeHandler];
+const getActiveFormat = () => formats.find(f => f.detect()) || null;
+
+
+// FORMAT-AGNOSTIC API
+
+const tryUpdate = () => {
+    try {
+        const fmt = getActiveFormat();
+        if (!fmt) return { success: false };
+        return {
+            success: true,
+            name: fmt.getTitle(),
+            currentPage: fmt.currentPage() ?? null,
+            supportsFullTable: fmt.supportsFullTable,
+            confirmCopy: fmt.confirmCopy || null
+        };
+    } catch (e) {
+        return { success: false };
+    }
+};
+
+const tryFile = () => {
+    try {
+        const fmt = getActiveFormat();
+        if (!fmt) return { success: false };
+        return {
+            success: true,
+            prefix: fmt.getTitle(),
+            currentPage: fmt.currentPage() ?? null,
+            file: JSON.stringify(fmt.prep(fmt.getRoot())),
+            formatName: fmt.name,
+            isFullTable: false
+        };
+    } catch (e) {
+        log('Error transferring file: ' + e.message);
+        return { success: false };
+    }
+};
+
+
+// TABLE DETECTION & HEARTBEAT
+
+const probeForTable = () => {
+    const result = tryUpdate();
+    chrome.runtime.sendMessage(
+        { from: 'content', subj: 'table-status', found: result.success },
+        () => { if (chrome.runtime.lastError) { /* worker not ready */ } }
+    );
+    if (result.success) {
+        log('Found table: ' + result.name);
+    }
+};
+
+const initProbe = () => {
+    // Bullhorn is an SPA, so the table may not exist yet even after load.
+    // Give the framework time to render before first check.
+    setTimeout(probeForTable, 3000);
+
+    // Re-probe when the SPA navigates by watching for table elements appearing/disappearing
+    let lastFound = null;
+    new MutationObserver(() => {
+        const found = !!getActiveFormat();
+        if (found !== lastFound) {
+            lastFound = found;
+            // Brief delay so the framework finishes rendering the new view
+            setTimeout(probeForTable, 1000);
+        }
+    }).observe(document.body, { childList: true, subtree: true });
+
+    // Periodic heartbeat: re-send table status every 5s so the icon
+    // stays correct even if the service worker restarts after going idle.
+    const heartbeat = setInterval(() => {
+        if (!chrome.runtime?.id) { clearInterval(heartbeat); return; } // extension reloaded
+        const found = !!getActiveFormat();
+        chrome.runtime.sendMessage(
+            { from: 'content', subj: 'table-status', found },
+            () => { if (chrome.runtime.lastError) { /* worker not ready */ } }
+        );
+    }, 5000);
+};
+
+if (document.readyState === 'complete') {
+    initProbe();
+} else {
+    window.addEventListener('load', initProbe);
+}
+
+
+// MESSAGE LISTENER
+
 chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
     if (
         (m.subj === 'update') &&
@@ -524,7 +751,10 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
         log(result.success ? 'Found table: ' + result.name : 'No table detected');
         sendResponse(result);
         // Also notify worker for icon state
-        chrome.runtime.sendMessage({ from: 'content', subj: 'table-status', found: result.success });
+        chrome.runtime.sendMessage(
+            { from: 'content', subj: 'table-status', found: result.success },
+            () => { if (chrome.runtime.lastError) { /* worker not ready */ } }
+        );
         return true;
     }
     if (
@@ -536,8 +766,13 @@ chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
         return true;
     }
     if (m.subj === 'full-table-request' && m.from === 'worker') {
-        sendResponse({ success: true });
-        fullTableScrape(); // detached — runs async without blocking
+        const fmt = getActiveFormat();
+        if (fmt && fmt.supportsFullTable) {
+            sendResponse({ success: true });
+            fmt.fullTableScrape();
+        } else {
+            sendResponse({ success: false });
+        }
         return false;
     }
     if (m.subj === 'cancel' && m.from === 'worker') {

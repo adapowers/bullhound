@@ -94,7 +94,9 @@ const askForFile = () => {
                         timestamp: Date.now(),
                         exportedRows: parsed.length - 1,
                         currentPage: data.currentPage || null,
-                        tableName: data.prefix || null
+                        tableName: data.prefix || null,
+                        formatName: data.formatName || null,
+                        isFullTable: data.isFullTable || false
                     };
                     chrome.runtime.sendMessage({
                         from: 'worker', subj: 'page-export-complete',
@@ -108,7 +110,9 @@ const askForFile = () => {
                         success: false,
                         timestamp: Date.now(),
                         error: 'Download failed: ' + e.message,
-                        tableName: data.prefix || null
+                        tableName: data.prefix || null,
+                        formatName: data.formatName || null,
+                        isFullTable: data.isFullTable || false
                     };
                     chrome.runtime.sendMessage({
                         from: 'worker', subj: 'page-export-complete',
@@ -142,7 +146,7 @@ const askForFile = () => {
         return false;
     }
     if (m.subj === 'full-table-progress' && m.from === 'content') {
-        state.progress = { page: m.page, totalPages: m.totalPages };
+        state.progress = { page: m.page, totalPages: m.totalPages, loadedRows: m.loadedRows || null };
         return false;
     }
     if (m.subj === 'full-table-returning' && m.from === 'content') {
@@ -173,8 +177,12 @@ const askForFile = () => {
                 dataChanged: meta.dataChanged || false,
                 addedDuringExport: meta.addedDuringExport || 0,
                 dupCount: meta.dupCount || 0,
+                missedRows: meta.missedRows || 0,
                 warning: meta.warning || null,
-                tableName: m.prefix || null
+                hint: meta.hint || null,
+                tableName: m.prefix || null,
+                formatName: m.formatName || null,
+                isFullTable: true
             };
         }
         catch(e) {
@@ -183,7 +191,9 @@ const askForFile = () => {
                 success: false,
                 timestamp: Date.now(),
                 error: 'Download failed: ' + e.message,
-                tableName: m.prefix || null
+                tableName: m.prefix || null,
+                formatName: m.formatName || null,
+                isFullTable: true
             };
         }
         return false;
@@ -194,7 +204,9 @@ const askForFile = () => {
             success: false,
             timestamp: Date.now(),
             warning: 'Export was cancelled',
-            tableName: m.prefix || null
+            tableName: m.prefix || null,
+            formatName: m.formatName || null,
+            isFullTable: true
         };
         return false;
     }
